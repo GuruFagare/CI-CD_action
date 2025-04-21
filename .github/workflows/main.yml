@@ -1,0 +1,38 @@
+name: MySQL Database Backup
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Runs daily at midnight
+  workflow_dispatch:     # Allows manual triggering
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Install MySQL Client
+        run: sudo apt-get install -y mysql-client
+
+      - name: Dump MySQL Database
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+        run: |
+          mkdir -p backup
+          mysqldump -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" > backup/${DB_NAME}_$(date +%F).sql
+
+      - name: Push to db-backup branch
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+          git checkout --orphan db-backup
+          git rm -rf .
+          cp -r backup/* .
+          git add .
+          git commit -m "Database backup on $(date)"
+          git push -f https://${{ secrets.GH_TOKEN }}@github.com/${{ github.repository }}.git db-backup
